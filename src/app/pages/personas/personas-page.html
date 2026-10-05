@@ -1,0 +1,180 @@
+<p-toast />
+<p-confirmdialog />
+
+<div class="p-8 max-w-5xl mx-auto">
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-semibold text-slate-900 tracking-tight">Personas</h1>
+      <p class="text-sm text-slate-500 mt-0.5">Gestiona a las personas que puedes asignar a cada evento.</p>
+    </div>
+    <div class="flex gap-2">
+      <p-button label="Grupos" icon="pi pi-sitemap" severity="secondary" (onClick)="openGroups()" />
+      <p-button label="Nueva persona" icon="pi pi-plus" (onClick)="newPerson()" />
+    </div>
+  </div>
+
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <p-table [value]="people()" [loading]="loading()" dataKey="personId" styleClass="p-datatable-sm">
+      <ng-template #header>
+        <tr>
+          <th class="!text-xs !font-medium !text-slate-500 !uppercase !tracking-wide">Nombre</th>
+          <th class="!text-xs !font-medium !text-slate-500 !uppercase !tracking-wide">Grupo</th>
+          <th class="!text-xs !font-medium !text-slate-500 !uppercase !tracking-wide">Contacto</th>
+          <th class="!text-xs !font-medium !text-slate-500 !uppercase !tracking-wide" style="width: 160px">Acciones</th>
+        </tr>
+      </ng-template>
+      <ng-template #body let-person>
+        <tr class="hover:bg-slate-50">
+          <td>
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 text-xs font-semibold uppercase">
+                {{ person.firstName?.charAt(0) }}{{ person.lastName?.charAt(0) }}
+              </div>
+              <span class="font-medium text-slate-900">{{ person.firstName }} {{ person.lastName }}</span>
+            </div>
+          </td>
+          <td>
+            <p-tag *ngIf="groupNameFor(person) as groupName" [value]="groupName" severity="secondary" />
+            <span *ngIf="!groupNameFor(person)" class="text-xs text-slate-400">—</span>
+          </td>
+          <td class="text-sm text-slate-600">
+            <div *ngIf="person.phone" class="flex items-center gap-1.5"><i class="pi pi-phone text-[11px] text-slate-400"></i>{{ person.phone }}</div>
+            <div *ngIf="person.email" class="flex items-center gap-1.5"><i class="pi pi-envelope text-[11px] text-slate-400"></i>{{ person.email }}</div>
+          </td>
+          <td>
+            <div class="flex gap-0.5">
+              <p-button icon="pi pi-calendar-times" severity="secondary" size="small" [text]="true" [rounded]="true"
+                        pTooltip="Disponibilidad" tooltipPosition="top" (onClick)="openUnavailability(person)" />
+              <p-button icon="pi pi-pencil" severity="secondary" size="small" [text]="true" [rounded]="true"
+                        pTooltip="Editar" tooltipPosition="top" (onClick)="editPerson(person)" />
+              <p-button icon="pi pi-trash" severity="danger" size="small" [text]="true" [rounded]="true"
+                        pTooltip="Eliminar" tooltipPosition="top" (onClick)="delete(person)" />
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+      <ng-template #emptymessage>
+        <tr>
+          <td colspan="4" class="text-center py-16">
+            <i class="pi pi-users text-3xl text-slate-300 mb-3 block"></i>
+            <p class="text-sm text-slate-500">No hay personas registradas todavía.</p>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </div>
+</div>
+
+<!-- Dialogo: crear/editar persona -->
+<p-dialog [(visible)]="dialogVisible" header="Persona" [modal]="true" [style]="{ width: '28rem' }" [transitionOptions]="'150ms cubic-bezier(0.23, 1, 0.32, 1)'">
+  <form [formGroup]="form" class="flex flex-col gap-5 pt-1">
+    <div class="grid grid-cols-2 gap-3">
+      <div class="flex flex-col gap-1.5">
+        <label class="text-sm font-medium text-slate-700">Nombres <span class="text-red-500">*</span></label>
+        <input pInputText formControlName="firstName" />
+      </div>
+      <div class="flex flex-col gap-1.5">
+        <label class="text-sm font-medium text-slate-700">Apellidos</label>
+        <input pInputText formControlName="lastName" />
+      </div>
+    </div>
+    <div class="flex flex-col gap-1.5">
+      <label class="text-sm font-medium text-slate-700">Teléfono</label>
+      <input pInputText formControlName="phone" />
+    </div>
+    <div class="flex flex-col gap-1.5">
+      <label class="text-sm font-medium text-slate-700">Email</label>
+      <input pInputText formControlName="email" />
+    </div>
+    <div class="flex flex-col gap-1.5">
+      <label class="text-sm font-medium text-slate-700">Grupo</label>
+      <p-select formControlName="personGroupId" [options]="groups()" optionLabel="name" optionValue="personGroupId"
+                placeholder="Sin grupo" [showClear]="true" appendTo="body" />
+    </div>
+
+    <p class="text-xs text-slate-400"><span class="text-red-500">*</span> Campo obligatorio</p>
+  </form>
+
+  <ng-template #footer>
+    <p-button label="Cancelar" severity="secondary" [text]="true" (onClick)="dialogVisible.set(false)" />
+    <p-button label="Guardar" (onClick)="save()" />
+  </ng-template>
+</p-dialog>
+
+<!-- Dialogo: grupos/áreas -->
+<p-dialog [(visible)]="groupsDialogVisible" header="Grupos / Áreas" [modal]="true" [style]="{ width: '26rem' }" [transitionOptions]="'150ms cubic-bezier(0.23, 1, 0.32, 1)'">
+  <div class="flex flex-col gap-3 pt-1">
+    <div class="flex gap-2">
+      <input pInputText [(ngModel)]="newGroupName" placeholder="Ej. Coro, Jóvenes" class="flex-1"
+             (keyup.enter)="addGroup()" />
+      <p-button icon="pi pi-plus" (onClick)="addGroup()" />
+    </div>
+
+    <ul class="flex flex-col gap-1.5">
+      <li *ngFor="let group of groups()" class="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200">
+        <input pInputText [ngModel]="group.name" (blur)="renameGroup(group, $any($event.target).value)"
+               (keyup.enter)="$any($event.target).blur()" class="flex-1 !text-sm !py-1" />
+        <button class="text-slate-400 hover:text-red-500 transition-colors" (click)="deleteGroup(group)">
+          <i class="pi pi-times text-xs"></i>
+        </button>
+      </li>
+      <li *ngIf="groups().length === 0" class="text-sm text-slate-500 text-center py-6">
+        Aún no hay grupos creados.
+      </li>
+    </ul>
+  </div>
+</p-dialog>
+
+<!-- Dialogo: disponibilidad -->
+<p-dialog [(visible)]="unavailabilityDialogVisible"
+          header="Disponibilidad de {{ unavailabilityPerson()?.firstName }}"
+          [modal]="true" [style]="{ width: '30rem' }" [transitionOptions]="'150ms cubic-bezier(0.23, 1, 0.32, 1)'">
+  <div class="flex flex-col gap-3 pt-1">
+    <p class="text-sm text-slate-500">
+      Agrega los días u horarios en los que esta persona <strong>no</strong> está disponible.
+    </p>
+
+    <div class="flex gap-2">
+      <p-select [(ngModel)]="newRestrictionType" [options]="[
+                  { value: 'WEEKDAY', label: 'Día recurrente' },
+                  { value: 'DATE', label: 'Fecha puntual' },
+                  { value: 'DATE_RANGE', label: 'Rango de fechas' }
+                ]" optionLabel="label" optionValue="value" styleClass="w-44" appendTo="body" />
+
+      <p-select *ngIf="newRestrictionType === 'WEEKDAY'" [(ngModel)]="newRestrictionDay"
+                [options]="weekDayOptions" optionLabel="label" optionValue="value"
+                placeholder="Día" class="flex-1" appendTo="body" />
+
+      <p-datepicker *ngIf="newRestrictionType === 'DATE'" [(ngModel)]="newRestrictionDate"
+                    dateFormat="yy-mm-dd" placeholder="Fecha" styleClass="flex-1" appendTo="body" />
+    </div>
+
+    <div class="flex gap-2" *ngIf="newRestrictionType === 'DATE_RANGE'">
+      <p-datepicker [(ngModel)]="newRestrictionDateFrom"
+                    dateFormat="yy-mm-dd" placeholder="Desde" styleClass="flex-1" appendTo="body" />
+      <p-datepicker [(ngModel)]="newRestrictionDateTo"
+                    dateFormat="yy-mm-dd" placeholder="Hasta" styleClass="flex-1" appendTo="body" />
+    </div>
+
+    <input pInputText [(ngModel)]="newRestrictionReason" placeholder="Motivo (opcional)" />
+
+    <p-button label="Agregar restricción" icon="pi pi-plus" (onClick)="addRestriction()" />
+
+    <ul class="flex flex-col gap-1.5 mt-1">
+      <li *ngFor="let r of restrictions()" class="flex items-center justify-between px-3 py-2.5 rounded-lg bg-slate-50 border border-slate-200">
+        <div class="text-sm text-slate-800">
+          <span *ngIf="r.dayOfWeek">Todos los {{ dayLabel(r.dayOfWeek) }}</span>
+          <span *ngIf="r.unavailableDate && r.untilDate">Del {{ r.unavailableDate }} al {{ r.untilDate }}</span>
+          <span *ngIf="r.unavailableDate && !r.untilDate">{{ r.unavailableDate }}</span>
+          <span *ngIf="r.reason" class="text-slate-500"> — {{ r.reason }}</span>
+        </div>
+        <button class="text-slate-400 hover:text-red-500 transition-colors" (click)="deleteRestriction(r)">
+          <i class="pi pi-times text-xs"></i>
+        </button>
+      </li>
+      <li *ngIf="restrictions().length === 0" class="text-sm text-slate-500 text-center py-6">
+        Sin restricciones registradas.
+      </li>
+    </ul>
+  </div>
+</p-dialog>

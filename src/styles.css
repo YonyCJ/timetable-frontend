@@ -1,1 +1,58 @@
-/* You can add global styles to this file, and also import other style files */
+@import "tailwindcss";
+@import "primeicons/primeicons.css";
+
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Feedback al presionar: todo botón/fila clicable se siente "vivo" */
+.p-button,
+.p-datatable-tbody > tr[class*="cursor-"],
+button {
+  transition: transform 140ms var(--ease-out), background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.p-button:not(.p-disabled):active {
+  transform: scale(0.97);
+}
+
+/* Filas de tabla: resalte suave, sin saltos */
+.p-datatable-tbody > tr {
+  transition: background-color 140ms ease;
+}
+
+/* Diálogos: entrada sutil desde un poco más chico, nunca desde 0 */
+.p-dialog {
+  transition: transform 200ms var(--ease-out), opacity 200ms var(--ease-out) !important;
+}
+.p-dialog-enter-from,
+.p-dialog.ng-animating.ng-trigger-animation.void {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
+/* Scrollbar discreta */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}

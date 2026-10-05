@@ -1,0 +1,355 @@
+<p-toast />
+<p-confirmdialog />
+
+<div class="p-6 max-w-[1400px] mx-auto">
+  <p-toolbar styleClass="mb-4">
+    <ng-template #start>
+      <a routerLink="/eventos" class="text-slate-400 hover:text-slate-700 mr-3">
+        <i class="pi pi-arrow-left"></i>
+      </a>
+      <h1 class="text-xl font-semibold text-slate-800 inline">{{ event()?.name }} — Horario</h1>
+    </ng-template>
+    <ng-template #end>
+      <p-button label="Autoasignar todo" icon="pi pi-sparkles" [loading]="autoAssigning()" (onClick)="openAutoAssignDialog()" />
+    </ng-template>
+  </p-toolbar>
+
+  <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
+    <div class="flex items-center gap-2">
+      <p-button icon="pi pi-chevron-left" severity="secondary" [text]="true" (onClick)="previousMonth()" />
+      <h2 class="text-lg font-medium text-slate-700">{{ monthLabel() }}</h2>
+      <p-button icon="pi pi-chevron-right" severity="secondary" [text]="true" (onClick)="nextMonth()" />
+    </div>
+    <div class="flex items-center gap-2">
+      <p-button label="Visualizar imagen" icon="pi pi-eye" severity="secondary" [loading]="generatingImage()" (onClick)="previewImage()" />
+      <p-selectbutton [ngModel]="viewMode()" (ngModelChange)="viewMode.set($event)"
+                       [options]="viewModeOptions" optionLabel="label" optionValue="value">
+        <ng-template let-item #item>
+          <i [class]="item.icon + ' text-xs mr-1'"></i>{{ item.label }}
+        </ng-template>
+      </p-selectbutton>
+    </div>
+  </div>
+
+  <div #scheduleCapture class="bg-white">
+  <div class="text-base font-semibold text-slate-800 mb-3 text-center uppercase">{{ event()?.name }} — {{ monthLabel() }}</div>
+
+  <div class="grid grid-cols-7 gap-1 text-center text-xs font-semibold mb-1 rounded-md overflow-hidden" *ngIf="viewMode() === 'calendar'">
+    <div *ngFor="let d of weekDays; let i = index" class="py-1.5 text-white"
+         [style.background-color]="i >= 5 ? '#00543f' : '#006B52'">{{ d }}</div>
+  </div>
+
+  <div class="grid grid-cols-7 gap-1 items-stretch" [class.opacity-50]="loading()" *ngIf="viewMode() === 'calendar'">
+    <div *ngFor="let day of calendarDays()">
+      <div *ngIf="!day"></div>
+
+      <div *ngIf="day && !day.occurrence"
+           class="h-full min-h-[70px] rounded-md flex items-start justify-start p-1.5 text-xs text-slate-300 bg-slate-50">
+        {{ day.day }}
+      </div>
+
+      <button *ngIf="day && day.occurrence && !day.occurrence.cancelled"
+              (click)="openDay(day)"
+              class="h-full w-full rounded-md flex flex-col items-stretch p-1.5 text-left border transition-colors"
+              [style.minHeight.px]="58 + parts().length * 18"
+              [ngClass]="assignmentsCount(day.occurrence.eventOccurrenceId) === 0
+                ? 'bg-white border-slate-200 hover:border-slate-400'
+                : assignmentsCount(day.occurrence.eventOccurrenceId) >= parts().length && parts().length > 0
+                  ? 'bg-emerald-50 border-emerald-300 hover:border-emerald-400'
+                  : 'bg-amber-50 border-amber-300 hover:border-amber-400'">
+        <span class="text-sm font-medium text-slate-700 mb-1">{{ day.day }}</span>
+        <div class="flex flex-col gap-1">
+          <div *ngFor="let part of orderedPartsFor(day.occurrence.occurrenceDate)" class="text-[11px] leading-tight text-slate-600 flex gap-1 items-baseline" [title]="part.name">
+            <span class="text-slate-400 font-mono shrink-0">{{ partTimeRange(part, day.occurrence.occurrenceDate) }}</span>
+            <span class="text-slate-400 shrink-0 uppercase font-medium">{{ abbreviatePart(part.name) }}</span>
+            <span class="truncate">{{ assignedName(day.occurrence.eventOccurrenceId, part.eventPartId!) }}</span>
+          </div>
+        </div>
+      </button>
+
+      <button *ngIf="day && day.occurrence && day.occurrence.cancelled"
+              (click)="openDay(day)"
+              class="h-full w-full rounded-md relative overflow-hidden flex items-start p-1.5 text-left bg-yellow-50 border border-yellow-300 hover:border-yellow-400"
+              [style.minHeight.px]="60 + parts().length * 13">
+        <span class="text-xs font-medium text-slate-700 relative z-10">{{ day.day }}</span>
+        <span class="absolute inset-0 flex items-center justify-center pointer-events-none px-2">
+          <span class="text-amber-600/80 font-bold uppercase tracking-wide text-[11px] leading-tight text-center -rotate-12">
+            {{ day.occurrence.cancellationReason || 'Cancelado' }}
+          </span>
+        </span>
+      </button>
+    </div>
+  </div>
+
+  <div class="flex items-center gap-4 mt-4 text-xs text-slate-500" *ngIf="viewMode() === 'calendar'">
+    <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-emerald-50 border border-emerald-300 inline-block"></span> Completo</span>
+    <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-amber-50 border border-amber-300 inline-block"></span> Parcial</span>
+    <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-white border border-slate-200 inline-block"></span> Sin asignar</span>
+    <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-yellow-50 border border-yellow-300 inline-block"></span> Cancelado</span>
+  </div>
+
+  <!-- Vista Compacta: mismo calendario, sin horarios y sin columnas de días que el evento no usa
+       (ej. sábado/domingo si es de lunes a viernes), con el nombre completo de parte y persona.
+       No toca nada de la vista Calendario de arriba. -->
+  <ng-container *ngIf="viewMode() === 'compact'">
+    <div class="grid gap-1 text-center text-xs font-semibold mb-1 rounded-md overflow-hidden"
+         [style.grid-template-columns]="gridTemplateColumns()">
+      <div *ngFor="let i of visibleWeekdayIndices()" class="py-1.5 text-white"
+           [style.background-color]="i >= 5 ? '#00543f' : '#006B52'">{{ weekDays[i] }}</div>
+    </div>
+
+    <div class="grid gap-1 items-stretch mb-1" [style.grid-template-columns]="gridTemplateColumns()"
+         [class.opacity-50]="loading()" *ngFor="let week of compactWeeks()">
+      <ng-container *ngFor="let day of week">
+        <div *ngIf="!day"></div>
+
+        <div *ngIf="day && !day.occurrence"
+             class="h-full min-h-[50px] rounded-md flex items-start justify-start p-1.5 text-xs text-slate-300 bg-slate-50">
+          {{ day.day }}
+        </div>
+
+        <button *ngIf="day && day.occurrence && !day.occurrence.cancelled"
+                (click)="openDay(day)"
+                class="h-full w-full rounded-md flex flex-col items-stretch p-2 text-left border transition-colors"
+                [ngClass]="assignmentsCount(day.occurrence.eventOccurrenceId) === 0
+                  ? 'bg-white border-slate-200 hover:border-slate-400'
+                  : assignmentsCount(day.occurrence.eventOccurrenceId) >= parts().length && parts().length > 0
+                    ? 'bg-emerald-50 border-emerald-300 hover:border-emerald-400'
+                    : 'bg-amber-50 border-amber-300 hover:border-amber-400'">
+          <span class="text-sm font-semibold text-slate-800 mb-1">{{ day.day }}</span>
+          <div class="flex flex-col">
+            <div *ngFor="let part of orderedPartsFor(day.occurrence.occurrenceDate); let i = index"
+                 class="text-sm leading-snug py-1 px-1 rounded flex items-center gap-1.5 flex-wrap"
+                 [class.bg-black/5]="i % 2 === 1">
+              <span class="bg-slate-500 text-white text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0">{{ part.name }}</span>
+              <span class="text-slate-900 font-medium">{{ assignedFullName(day.occurrence.eventOccurrenceId, part.eventPartId!) }}</span>
+            </div>
+          </div>
+        </button>
+
+        <button *ngIf="day && day.occurrence && day.occurrence.cancelled"
+                (click)="openDay(day)"
+                class="h-full w-full rounded-md relative overflow-hidden flex items-start p-2 text-left bg-yellow-50 border border-yellow-300 hover:border-yellow-400">
+          <span class="text-sm font-semibold text-slate-800 relative z-10">{{ day.day }}</span>
+          <span class="absolute inset-0 flex items-center justify-center pointer-events-none px-2">
+            <span class="text-amber-600/80 font-bold uppercase tracking-wide text-sm leading-tight text-center -rotate-12">
+              {{ day.occurrence.cancellationReason || 'Cancelado' }}
+            </span>
+          </span>
+        </button>
+      </ng-container>
+    </div>
+  </ng-container>
+
+  <!-- Vista Verde: copia de Compacto probando la paleta de la empresa con tarjetas en degradado
+       verde (#006B52), igual lógica y datos que Compacto, solo cambia el estilo visual. -->
+  <ng-container *ngIf="viewMode() === 'compact-green'">
+    <div class="grid gap-1 text-center text-xs font-semibold mb-1 rounded-md overflow-hidden"
+         [style.grid-template-columns]="gridTemplateColumns()">
+      <div *ngFor="let i of visibleWeekdayIndices()" class="py-1.5 text-white"
+           [style.background-color]="i >= 5 ? '#00543f' : '#006B52'">{{ weekDays[i] }}</div>
+    </div>
+
+    <div class="grid gap-1 items-stretch mb-1" [style.grid-template-columns]="gridTemplateColumns()"
+         [class.opacity-50]="loading()" *ngFor="let week of compactWeeks()">
+      <ng-container *ngFor="let day of week">
+        <div *ngIf="!day"></div>
+
+        <div *ngIf="day && !day.occurrence"
+             class="h-full min-h-[50px] rounded-md flex items-start justify-start p-1.5 text-xs text-slate-300 bg-slate-50">
+          {{ day.day }}
+        </div>
+
+        <button *ngIf="day && day.occurrence && !day.occurrence.cancelled"
+                (click)="openDay(day)"
+                class="h-full w-full rounded-md flex flex-col items-stretch p-2 text-left border transition-colors"
+                [ngClass]="assignmentsCount(day.occurrence.eventOccurrenceId) === 0
+                  ? 'bg-white border-emerald-100 hover:border-emerald-300'
+                  : assignmentsCount(day.occurrence.eventOccurrenceId) >= parts().length && parts().length > 0
+                    ? 'text-white border-transparent'
+                    : 'border-emerald-200 hover:border-emerald-400'"
+                [style.background]="assignmentsCount(day.occurrence.eventOccurrenceId) === 0
+                  ? null
+                  : assignmentsCount(day.occurrence.eventOccurrenceId) >= parts().length && parts().length > 0
+                    ? 'linear-gradient(135deg, #006B52, #33b585)'
+                    : 'linear-gradient(135deg, #e3f8ee, #b9ecd3)'">
+          <span class="text-sm font-semibold mb-1"
+                [ngClass]="assignmentsCount(day.occurrence.eventOccurrenceId) >= parts().length && parts().length > 0 ? 'text-white' : 'text-slate-800'">{{ day.day }}</span>
+          <div class="flex flex-col">
+            <div *ngFor="let part of orderedPartsFor(day.occurrence.occurrenceDate); let i = index"
+                 class="text-sm leading-snug py-1 px-1 rounded flex items-center gap-1.5 flex-wrap"
+                 [class.bg-white/10]="i % 2 === 1 && assignmentsCount(day.occurrence.eventOccurrenceId) >= parts().length && parts().length > 0"
+                 [class.bg-black/5]="i % 2 === 1 && !(assignmentsCount(day.occurrence.eventOccurrenceId) >= parts().length && parts().length > 0)">
+              <span class="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0 bg-white text-black">{{ part.name }}</span>
+              <span class="font-medium"
+                    [ngClass]="assignmentsCount(day.occurrence.eventOccurrenceId) >= parts().length && parts().length > 0 ? 'text-white' : 'text-slate-900'">{{ assignedFullName(day.occurrence.eventOccurrenceId, part.eventPartId!) }}</span>
+            </div>
+          </div>
+        </button>
+
+        <button *ngIf="day && day.occurrence && day.occurrence.cancelled"
+                (click)="openDay(day)"
+                class="h-full w-full rounded-md relative overflow-hidden flex items-start p-2 text-left bg-yellow-50 border border-yellow-300 hover:border-yellow-400">
+          <span class="text-sm font-semibold text-slate-800 relative z-10">{{ day.day }}</span>
+          <span class="absolute inset-0 flex items-center justify-center pointer-events-none px-2">
+            <span class="text-amber-600/80 font-bold uppercase tracking-wide text-sm leading-tight text-center -rotate-12">
+              {{ day.occurrence.cancellationReason || 'Cancelado' }}
+            </span>
+          </span>
+        </button>
+      </ng-container>
+    </div>
+  </ng-container>
+
+  <!-- Vista Cuadro: hoja tipo Excel agrupada por semana — partes en filas, fechas en columnas.
+       Si una persona cubre varias partes seguidas el mismo día, se fusionan en una sola celda. -->
+  <div *ngIf="viewMode() === 'sheet'" [class.opacity-50]="loading()">
+    <div class="rounded-lg border border-slate-300 overflow-hidden" *ngIf="sheetWeeks().length > 0">
+    <div *ngFor="let week of sheetWeeks()">
+      <table class="w-full text-xs border-collapse table-fixed">
+        <thead>
+          <tr>
+            <th class="bg-slate-100 text-slate-700 px-2 py-2 text-left font-semibold border border-slate-300 w-36"></th>
+            <th *ngFor="let occ of week.columns" (click)="openOccurrence(occ)"
+                class="text-white px-2 py-2 text-center font-semibold border border-slate-300 cursor-pointer whitespace-nowrap"
+                style="background-color: #006B52">
+              {{ ddmmyyyy(occ.occurrenceDate) }}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let part of parts(); let r = index">
+            <td class="bg-slate-100 text-slate-700 px-2 py-1.5 font-semibold border border-slate-300 break-words">
+              {{ part.name }}
+              <i *ngIf="partHasSwap(part)" class="pi pi-sync text-[10px] text-slate-500 ml-1" pTooltip="Esta parte cambia de lugar según el día — ver la nota debajo del cuadro"></i>
+            </td>
+            <ng-container *ngFor="let occ of week.columns; let c = index">
+              <td *ngIf="week.grid[r][c]?.render" [attr.rowspan]="week.grid[r][c].rowSpan"
+                  class="px-2 py-1.5 text-center border border-slate-300 align-middle"
+                  [ngClass]="week.grid[r][c].cancelled ? 'bg-yellow-50 text-amber-700 font-semibold' : 'bg-emerald-50 text-slate-800'">
+                {{ week.grid[r][c].label }}
+              </td>
+            </ng-container>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    </div>
+    <div *ngIf="sheetWeeks().length === 0" class="text-sm text-slate-500 text-center py-10">
+      No hay fechas programadas este mes.
+    </div>
+  </div>
+  </div>
+</div>
+
+<!-- Nota de las reglas de intercambio: fuera de #scheduleCapture a propósito, para que se vea
+     en pantalla pero NO salga en la imagen/PDF generado. -->
+<div *ngIf="swapRulesSummary().length > 0 && (viewMode() === 'calendar' || viewMode() === 'compact' || viewMode() === 'compact-green')"
+     class="max-w-[1400px] mx-auto -mt-2 mb-2 px-6 py-2 rounded-lg bg-indigo-50 border border-indigo-100 text-xs text-indigo-700 flex flex-col gap-0.5">
+  <span class="font-medium flex items-center gap-1"><i class="pi pi-sync text-[10px]"></i> Reglas de intercambio de orden activas</span>
+  <span *ngFor="let rule of swapRulesSummary()">{{ rule }}</span>
+</div>
+
+<div *ngIf="swapRulesSummary().length > 0 && viewMode() === 'sheet'"
+     class="max-w-[1400px] mx-auto -mt-2 mb-2 px-6 text-[11px] text-slate-500 flex flex-col gap-0.5">
+  <span *ngFor="let rule of swapRulesSummary()" class="flex items-center gap-1">
+    <i class="pi pi-sync text-[9px]"></i>{{ rule }}
+  </span>
+</div>
+
+<!-- Dialogo: autoasignar desde una fecha (para no mover fechas ya ejecutadas/compartidas) -->
+<p-dialog [(visible)]="autoAssignDialogVisible" header="Autoasignar todo" [modal]="true" [style]="{ width: '26rem' }">
+  <div class="flex flex-col gap-2">
+    <label class="text-sm font-medium text-slate-700">Desde qué fecha re-sortear</label>
+    <p-datepicker [(ngModel)]="autoAssignFromDate" dateFormat="dd/mm/yy" [showIcon]="true" appendTo="body" />
+    <p class="text-xs text-slate-500">
+      Las fechas anteriores a esta no se van a tocar — útil si ya compartiste o ejecutaste algunas fechas y no quieres que cambien.
+    </p>
+  </div>
+  <ng-template #footer>
+    <p-button label="Cancelar" severity="secondary" [text]="true" (onClick)="autoAssignDialogVisible.set(false)" />
+    <p-button label="Autoasignar" icon="pi pi-sparkles" [loading]="autoAssigning()" (onClick)="confirmAutoAssignAll()" />
+  </ng-template>
+</p-dialog>
+
+<!-- Dialogo: detalle del día -->
+<p-dialog [(visible)]="dayDialogVisible" header="{{ selectedDay()?.occurrenceDate }}" [modal]="true" [style]="{ width: '40rem' }">
+  <ng-container *ngIf="selectedDay() as occurrence">
+    <div class="flex items-center justify-between mb-3">
+      <p-tag *ngIf="!occurrence.cancelled" value="Programado" severity="success" />
+      <p-tag *ngIf="occurrence.cancelled" [value]="'Cancelado' + (occurrence.cancellationReason ? ': ' + occurrence.cancellationReason : '')" severity="danger" />
+
+      <div class="flex gap-1">
+        <p-button *ngIf="!occurrence.cancelled" label="Sortear" icon="pi pi-sparkles" size="small"
+                  [loading]="drawingDay()" (onClick)="drawDay()" />
+        <p-button *ngIf="!occurrence.cancelled" icon="pi pi-ban" severity="danger" size="small" [text]="true"
+                  pTooltip="Cancelar (ej. feriado, actividad social)" (onClick)="openCancel()" />
+        <p-button *ngIf="occurrence.cancelled" icon="pi pi-replay" severity="secondary" size="small" [text]="true"
+                  pTooltip="Reactivar" (onClick)="reactivate()" />
+      </div>
+    </div>
+
+    <div class="flex flex-col gap-2" *ngIf="!occurrence.cancelled">
+      <div class="flex items-center gap-3 text-xs font-medium text-slate-400 px-0.5">
+        <span class="w-5 text-right">#</span>
+        <span class="w-24">Hora</span>
+        <span class="w-32">Parte</span>
+        <span class="flex-1">Persona</span>
+      </div>
+      <div *ngFor="let part of orderedPartsFor(occurrence.occurrenceDate)" class="flex items-center gap-3">
+        <span class="w-5 text-sm text-slate-400 text-right">{{ effectiveOrder(part, occurrence.occurrenceDate) }}</span>
+        <span class="w-24 text-xs text-slate-500 font-mono">{{ partTimeRange(part, occurrence.occurrenceDate) }}</span>
+        <span class="w-32 text-sm text-slate-600 truncate" [title]="part.name">{{ part.name }}</span>
+        <p-select
+          [ngModel]="assignedPerson(occurrence.eventOccurrenceId, part.eventPartId!)"
+          (ngModelChange)="assignManually(occurrence.eventOccurrenceId, part.eventPartId!, $event)"
+          [options]="people()"
+          optionLabel="firstName"
+          optionValue="personId"
+          placeholder="Sin asignar"
+          styleClass="w-44"
+          appendTo="body"
+        >
+          <ng-template let-person #item>
+            {{ person.firstName }} {{ person.lastName }}
+          </ng-template>
+          <ng-template let-selected #selectedItem>
+            {{ selected ? selected.firstName + ' ' + selected.lastName : '' }}
+          </ng-template>
+        </p-select>
+        <p-tag *ngIf="assignmentOrigin(occurrence.eventOccurrenceId, part.eventPartId!) as origin"
+               [value]="origin === 'AUTOMATIC' ? 'Sorteo' : 'Manual'"
+               [severity]="origin === 'AUTOMATIC' ? 'info' : 'secondary'" />
+      </div>
+      <div *ngIf="parts().length === 0" class="text-sm text-slate-500">
+        Este evento no tiene partes configuradas todavía.
+      </div>
+    </div>
+  </ng-container>
+</p-dialog>
+
+<!-- Dialogo: cancelar día -->
+<p-dialog [(visible)]="cancelDialogVisible" header="Cancelar fecha" [modal]="true" [style]="{ width: '24rem' }">
+  <div class="flex flex-col gap-1">
+    <label class="text-sm font-medium text-slate-700">Motivo / etiqueta (ej. Feriado, Actividad social)</label>
+    <input pInputText [(ngModel)]="cancellationReason" />
+  </div>
+  <ng-template #footer>
+    <p-button label="Volver" severity="secondary" [text]="true" (onClick)="cancelDialogVisible.set(false)" />
+    <p-button label="Confirmar" severity="danger" (onClick)="confirmCancel()" />
+  </ng-template>
+</p-dialog>
+
+<!-- Dialogo: previsualización de imagen -->
+<p-dialog [(visible)]="imagePreviewVisible" header="Previsualización" [modal]="true" [style]="{ width: '44rem' }">
+  <div class="flex flex-col gap-3">
+    <div class="border border-slate-200 rounded-lg overflow-auto max-h-[70vh]">
+      <img *ngIf="imagePreviewUrl()" [src]="imagePreviewUrl()" class="w-full h-auto block" alt="Previsualización del horario" />
+    </div>
+  </div>
+  <ng-template #footer>
+    <p-button label="Cerrar" severity="secondary" [text]="true" (onClick)="imagePreviewVisible.set(false)" />
+    <p-button label="Descargar PDF" icon="pi pi-file-pdf" severity="secondary" (onClick)="downloadImagePdf()" />
+    <p-button label="Descargar imagen" icon="pi pi-download" (onClick)="downloadImagePng()" />
+  </ng-template>
+</p-dialog>

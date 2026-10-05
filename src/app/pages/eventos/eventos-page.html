@@ -1,0 +1,270 @@
+<p-toast />
+<p-confirmdialog />
+
+<div class="p-8 max-w-6xl mx-auto">
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-semibold text-slate-900 tracking-tight">Eventos</h1>
+      <p class="text-sm text-slate-500 mt-0.5">Configura tus eventos recurrentes y sus partes.</p>
+    </div>
+    <p-button label="Nuevo evento" icon="pi pi-plus" (onClick)="newEvent()" />
+  </div>
+
+  <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+    <p-table [value]="events()" [loading]="loading()" dataKey="eventId" styleClass="p-datatable-sm">
+      <ng-template #header>
+        <tr>
+          <th class="!text-xs !font-medium !text-slate-500 !uppercase !tracking-wide">Nombre</th>
+          <th class="!text-xs !font-medium !text-slate-500 !uppercase !tracking-wide">Recurrencia</th>
+          <th class="!text-xs !font-medium !text-slate-500 !uppercase !tracking-wide">Horario</th>
+          <th class="!text-xs !font-medium !text-slate-500 !uppercase !tracking-wide">Vigencia</th>
+          <th class="!text-xs !font-medium !text-slate-500 !uppercase !tracking-wide" style="width: 220px">Acciones</th>
+        </tr>
+      </ng-template>
+      <ng-template #body let-event>
+        <tr class="hover:bg-slate-50">
+          <td>
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                <i class="pi pi-calendar text-sm"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="font-medium text-slate-900 truncate">{{ event.name }}</div>
+                <div class="text-xs text-slate-500 truncate" *ngIf="event.description">{{ event.description }}</div>
+              </div>
+            </div>
+          </td>
+          <td>
+            <p-tag [value]="typeLabel(event.recurrenceType)" severity="info" />
+          </td>
+          <td class="text-sm text-slate-600 font-mono">{{ event.startTime?.substring(0,5) }} – {{ event.endTime?.substring(0,5) }}</td>
+          <td class="text-sm text-slate-600">
+            <span>{{ event.startDate }}</span>
+            <span *ngIf="event.endDate" class="text-slate-400"> → {{ event.endDate }}</span>
+          </td>
+          <td>
+            <div class="flex gap-0.5">
+              <p-button icon="pi pi-list" severity="secondary" size="small" [text]="true" [rounded]="true"
+                        pTooltip="Partes del evento" tooltipPosition="top" (onClick)="openParts(event)" />
+              <p-button icon="pi pi-calendar" severity="secondary" size="small" [text]="true" [rounded]="true"
+                        pTooltip="Horario y asignaciones" tooltipPosition="top" [routerLink]="['/eventos', event.eventId, 'horario']" />
+              <p-button icon="pi pi-pencil" severity="secondary" size="small" [text]="true" [rounded]="true"
+                        pTooltip="Editar" tooltipPosition="top" (onClick)="editEvent(event)" />
+              <p-button icon="pi pi-trash" severity="danger" size="small" [text]="true" [rounded]="true"
+                        pTooltip="Eliminar" tooltipPosition="top" (onClick)="delete(event)" />
+            </div>
+          </td>
+        </tr>
+      </ng-template>
+      <ng-template #emptymessage>
+        <tr>
+          <td colspan="5" class="text-center py-16">
+            <i class="pi pi-calendar text-3xl text-slate-300 mb-3 block"></i>
+            <p class="text-sm text-slate-500">No hay eventos registrados todavía.</p>
+          </td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </div>
+</div>
+
+<!-- Dialogo: crear/editar evento -->
+<p-dialog [(visible)]="dialogVisible" header="Evento" [modal]="true" [style]="{ width: '32rem' }" [transitionOptions]="'150ms cubic-bezier(0.23, 1, 0.32, 1)'">
+  <form [formGroup]="form" class="flex flex-col gap-5 pt-1">
+    <div class="flex flex-col gap-1.5">
+      <label class="text-sm font-medium text-slate-700">Nombre <span class="text-red-500">*</span></label>
+      <input pInputText formControlName="name" placeholder="Ej. Culto de oración" />
+    </div>
+
+    <div class="flex flex-col gap-1.5">
+      <label class="text-sm font-medium text-slate-700">Descripción</label>
+      <textarea pTextarea formControlName="description" rows="2"></textarea>
+    </div>
+
+    <div class="flex flex-col gap-1.5">
+      <label class="text-sm font-medium text-slate-700">Tipo de recurrencia <span class="text-red-500">*</span></label>
+      <p-select formControlName="recurrenceType" [options]="recurrenceTypes" optionLabel="label" optionValue="value" appendTo="body" />
+    </div>
+
+    <div class="flex flex-col gap-1.5" *ngIf="currentType === 'WEEKLY'">
+      <label class="text-sm font-medium text-slate-700">Días de la semana <span class="text-red-500">*</span></label>
+      <p-multiselect formControlName="weekDays" [options]="weekDayOptions" optionLabel="label" optionValue="value"
+                      placeholder="Selecciona los días" appendTo="body" />
+      <span class="text-xs text-red-500" *ngIf="form.controls.weekDays.invalid && form.controls.weekDays.touched">
+        Selecciona al menos un día.
+      </span>
+    </div>
+
+    <div class="flex flex-col gap-1.5" *ngIf="currentType === 'MONTHLY'">
+      <label class="text-sm font-medium text-slate-700">Día del mes <span class="text-red-500">*</span></label>
+      <p-inputnumber formControlName="dayOfMonth" [min]="1" [max]="31" />
+    </div>
+
+    <div class="flex flex-col gap-1.5" *ngIf="currentType === 'EVERY_N_DAYS'">
+      <label class="text-sm font-medium text-slate-700">Cada cuántos días se repite <span class="text-red-500">*</span></label>
+      <p-inputnumber formControlName="intervalDays" [min]="1" />
+    </div>
+
+    <div class="grid grid-cols-2 gap-3">
+      <div class="flex flex-col gap-1.5">
+        <label class="text-sm font-medium text-slate-700">Hora inicio <span class="text-red-500">*</span></label>
+        <p-datepicker formControlName="startTime" [timeOnly]="true" hourFormat="24" appendTo="body" />
+      </div>
+      <div class="flex flex-col gap-1.5">
+        <label class="text-sm font-medium text-slate-700">Hora fin <span class="text-red-500">*</span></label>
+        <p-datepicker formControlName="endTime" [timeOnly]="true" hourFormat="24" appendTo="body" />
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3">
+      <div class="flex flex-col gap-1.5">
+        <label class="text-sm font-medium text-slate-700">Fecha inicio <span class="text-red-500">*</span></label>
+        <p-datepicker formControlName="startDate" dateFormat="yy-mm-dd" appendTo="body" />
+      </div>
+      <div class="flex flex-col gap-1.5">
+        <label class="text-sm font-medium text-slate-700">Fecha fin (opcional)</label>
+        <p-datepicker formControlName="endDate" dateFormat="yy-mm-dd" appendTo="body" />
+      </div>
+    </div>
+
+    <div class="flex flex-col gap-1.5">
+      <label class="text-sm font-medium text-slate-700">Personas para el sorteo</label>
+      <p-select formControlName="personSelectionMode" [options]="personSelectionModes" optionLabel="label" optionValue="value" appendTo="body" />
+    </div>
+
+    <div class="flex flex-col gap-1.5" *ngIf="currentPersonSelectionMode === 'GROUP'">
+      <label class="text-sm font-medium text-slate-700">Grupo <span class="text-red-500">*</span></label>
+      <p-select formControlName="personGroupId" [options]="personGroups()" optionLabel="name" optionValue="personGroupId"
+                placeholder="Selecciona un grupo" appendTo="body" />
+    </div>
+
+    <div class="flex flex-col gap-1.5" *ngIf="currentPersonSelectionMode === 'GROUP'">
+      <label class="text-sm font-medium text-slate-700">Invitados adicionales (opcional)</label>
+      <p-multiselect [(ngModel)]="selectedEventPeople" [ngModelOptions]="{ standalone: true }"
+                      [options]="peopleExcludingGroup()" optionLabel="firstName" optionValue="personId"
+                      placeholder="Ninguno" [maxSelectedLabels]="2" appendTo="body">
+        <ng-template let-person #item>{{ person.firstName }} {{ person.lastName }}</ng-template>
+      </p-multiselect>
+      <p class="text-xs text-slate-400">Personas fuera del grupo que participan solo en este evento (ej. un invitado puntual).</p>
+    </div>
+
+    <div class="flex flex-col gap-1.5" *ngIf="currentPersonSelectionMode === 'SPECIFIC'">
+      <label class="text-sm font-medium text-slate-700">Personas específicas <span class="text-red-500">*</span></label>
+      <p-multiselect [(ngModel)]="selectedEventPeople" [ngModelOptions]="{ standalone: true }"
+                      [options]="allPeople()" optionLabel="firstName" optionValue="personId"
+                      placeholder="Selecciona las personas" [maxSelectedLabels]="3" appendTo="body">
+        <ng-template let-person #item>{{ person.firstName }} {{ person.lastName }}</ng-template>
+      </p-multiselect>
+    </div>
+
+    <p class="text-xs text-slate-400"><span class="text-red-500">*</span> Campo obligatorio</p>
+  </form>
+
+  <ng-template #footer>
+    <p-button label="Cancelar" severity="secondary" [text]="true" (onClick)="dialogVisible.set(false)" />
+    <p-button label="Guardar" (onClick)="save()" />
+  </ng-template>
+</p-dialog>
+
+<!-- Dialogo: partes dinámicas del evento -->
+<p-dialog [(visible)]="partsDialogVisible" header="Partes de {{ partsEvent()?.name }}" [modal]="true"
+          [style]="{ width: '54rem' }" [breakpoints]="{ '1100px': '90vw', '640px': '96vw' }"
+          [transitionOptions]="'150ms cubic-bezier(0.23, 1, 0.32, 1)'">
+  <div class="flex flex-col gap-3 pt-1">
+    <div class="flex gap-2">
+      <input pInputText [(ngModel)]="newPartName" placeholder="Ej. Oración inicial" class="flex-1"
+             (keyup.enter)="addPart()" />
+      <p-button icon="pi pi-plus" (onClick)="addPart()" />
+    </div>
+
+    <p class="text-xs text-slate-400 leading-relaxed">
+      <span *ngIf="parts().length > 1">Arrastra <i class="pi pi-bars text-[10px]"></i> para cambiar el orden. </span>
+      Horario manual opcional por parte — si lo dejas vacío, se reparte automático entre la hora de inicio y fin del evento.
+      Marca el <i class="pi pi-check-square text-[10px]"></i> de 2 o más partes y presiona "Unir" para que el sorteo tenga la posibilidad de darle esas partes a una sola persona (por ejemplo, que quien haga la bienvenida también ore).
+      Con <i class="pi pi-sync text-[10px]"></i> puedes hacer que una parte intercambie su lugar (y horario) con otra en días específicos — por ejemplo, que "Oración Intercesora" pase a ir donde va "Pedidos de Oración" los martes y jueves.
+    </p>
+
+    <div class="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-indigo-50 border border-indigo-100"
+         *ngIf="selectedPartIds().size > 0">
+      <span class="text-xs text-indigo-700">{{ selectedPartIds().size }} parte(s) seleccionadas</span>
+      <div class="flex gap-1.5">
+        <p-button label="Unir" icon="pi pi-link" size="small" [disabled]="selectedPartIds().size < 2" (onClick)="linkSelectedParts()" />
+        <p-button icon="pi pi-times" severity="secondary" size="small" [text]="true" (onClick)="clearLinkSelection()" />
+      </div>
+    </div>
+
+    <ul class="flex flex-col gap-1.5" cdkDropList (cdkDropListDropped)="dropPart($event)">
+      <li *ngFor="let part of parts()" cdkDrag
+          class="flex flex-col gap-2 px-3 py-2.5 rounded-lg bg-slate-50 border cursor-move hover:border-slate-300 transition-colors"
+          [class.border-indigo-300]="part.linkGroupId"
+          [class.border-slate-200]="!part.linkGroupId">
+        <div class="flex items-center gap-2">
+          <input type="checkbox" class="shrink-0 cursor-pointer" [checked]="isSelectedForLink(part)"
+                 (click)="$event.stopPropagation(); toggleSelectForLink(part)" />
+          <i class="pi pi-bars text-slate-400 text-xs shrink-0"></i>
+          <span class="text-slate-400 text-sm shrink-0">{{ part.sortOrder }}.</span>
+          <span class="flex-1 min-w-0 truncate text-sm text-slate-800" [title]="part.name">{{ part.name }}</span>
+          <button class="text-slate-400 hover:text-indigo-600 transition-colors shrink-0" pTooltip="Editar parte"
+                  (click)="$event.stopPropagation(); openEditPart(part)">
+            <i class="pi pi-pencil text-xs"></i>
+          </button>
+          <button class="text-slate-400 hover:text-red-500 transition-colors shrink-0" (click)="deletePart(part)">
+            <i class="pi pi-times text-xs"></i>
+          </button>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 pl-7" (click)="$event.stopPropagation()">
+          <div class="flex items-center gap-1.5">
+            <p-datepicker [ngModel]="editableTimes[part.eventPartId!]?.start ?? null"
+                          (ngModelChange)="updatePartTime(part, 'startTime', $event)"
+                          [timeOnly]="true" hourFormat="24" placeholder="Auto" styleClass="w-20" appendTo="body" />
+            <span class="text-slate-400 text-xs">a</span>
+            <p-datepicker [ngModel]="editableTimes[part.eventPartId!]?.end ?? null"
+                          (ngModelChange)="updatePartTime(part, 'endTime', $event)"
+                          [timeOnly]="true" hourFormat="24" placeholder="Auto" styleClass="w-20" appendTo="body" />
+            <p-button *ngIf="part.startTime || part.endTime" icon="pi pi-refresh" severity="secondary" size="small" [text]="true"
+                      pTooltip="Volver a automático" (onClick)="clearPartTime(part)" />
+          </div>
+
+          <div class="flex items-center gap-1.5" *ngIf="part.linkGroupId">
+            <i class="pi pi-link text-indigo-500 text-xs"></i>
+            <span class="text-xs text-indigo-600">
+              Vinculada con: {{ linkedPartNamesFor(part) }}
+            </span>
+            <button class="text-indigo-400 hover:text-red-500 transition-colors" pTooltip="Desvincular" (click)="unlinkPart(part)">
+              <i class="pi pi-times-circle text-xs"></i>
+            </button>
+          </div>
+
+          <div class="flex items-center gap-1.5">
+            <i class="pi pi-sync text-slate-400 text-xs shrink-0"></i>
+            <p-select [ngModel]="part.swapWithPartId ?? null"
+                      (ngModelChange)="updateSwapTarget(part, $event)"
+                      [options]="otherPartsFor(part)" optionLabel="name" optionValue="eventPartId"
+                      placeholder="Sin intercambio de orden" [showClear]="true" styleClass="w-44" appendTo="body" />
+            <p-multiselect *ngIf="part.swapWithPartId" [ngModel]="swapWeekDaysFor(part)"
+                            (ngModelChange)="updateSwapDays(part, $event)"
+                            [options]="weekDayOptions" optionLabel="label" optionValue="value"
+                            placeholder="Días" [maxSelectedLabels]="2" styleClass="w-36" appendTo="body" />
+          </div>
+        </div>
+      </li>
+      <li *ngIf="parts().length === 0" class="text-sm text-slate-500 text-center py-6">
+        Aún no hay partes configuradas.
+      </li>
+    </ul>
+  </div>
+</p-dialog>
+
+<!-- Dialogo: editar parte -->
+<p-dialog [(visible)]="editPartDialogVisible" header="Editar parte" [modal]="true" [style]="{ width: '24rem' }" [transitionOptions]="'150ms cubic-bezier(0.23, 1, 0.32, 1)'">
+  <div class="flex flex-col gap-1.5 pt-1">
+    <label class="text-sm font-medium text-slate-700">Nombre</label>
+    <input pInputText [(ngModel)]="editPartNameValue" (keyup.enter)="saveEditPart()" />
+  </div>
+
+  <ng-template #footer>
+    <p-button label="Cancelar" severity="secondary" [text]="true" (onClick)="editPartDialogVisible.set(false)" />
+    <p-button label="Guardar" (onClick)="saveEditPart()" />
+  </ng-template>
+</p-dialog>
